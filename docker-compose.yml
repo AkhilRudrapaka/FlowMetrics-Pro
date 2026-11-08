@@ -1,0 +1,72 @@
+# Full stack: MongoDB + Go API + React (nginx).   Usage: cp .env.example .env && docker compose up --build
+name: flowmetrics-pro
+
+services:
+  mongo:
+    image: mongo:8.0
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:?copy .env.example to .env}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?copy .env.example to .env}
+    volumes:
+      - mongo-data:/data/db
+    ports:
+      - "127.0.0.1:27017:27017" # loopback only: reachable from this machine, never from the network
+    # Authenticated on purpose: on first start the image runs a temporary localhost-only mongod
+    # *before* the root user exists. An unauthenticated ping would pass during that phase and let the
+    # API start too early; this check only succeeds once the real server accepts the root login.
+    # ($$ stops Compose from interpolating; the container's own shell expands the variables.)
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - mongosh --quiet -u "$$MONGO_INITDB_ROOT_USERNAME" -p "$$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin --eval "db.adminCommand('ping').ok" | grep -q 1
+      interval: 5s
+      timeout: 10s
+      retries: 20
+      start_period: 15s
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      PORT: "8080"
+      MONGO_URI: mongodb://${MONGO_ROOT_USER}:${MONGO_ROOT_PASSWORD}@mongo:27017/?authSource=admin
+      MONGO_DB: ${MONGO_DB:-flowmetrics}
+      JWT_SECRET: ${JWT_SECRET:?copy .env.example to .env}
+      ACCESS_TOKEN_TTL: ${ACCESS_TOKEN_TTL:-15m}
+      REFRESH_TOKEN_TTL: ${REFRESH_TOKEN_TTL:-168h}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      AUTH_RATE_LIMIT_PER_MIN: ${AUTH_RATE_LIMIT_PER_MIN:-20}
+      BCRYPT_COST: ${BCRYPT_COST:-12}
+      # nginx sits in front, so trust X-Forwarded-For from private (Docker network) ranges only.
+      TRUSTED_PROXIES: 10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
+      SEED_ON_START: ${SEED_ON_START:-false}
+      SEED_PASSWORD: ${SEED_PASSWORD:-}
+    # Not published to the host: the browser reaches the API through the frontend's nginx.
+    expose:
+      - "8080"
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_DEMO_HINT: ${VITE_DEMO_HINT:-false}
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${WEB_PORT:-3000}:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/"]
+      interval: 10s
+      timeout: 4s
+      retries: 5
+      start_period: 5s
+
+volumes:
+  mongo-data:
