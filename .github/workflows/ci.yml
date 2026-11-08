@@ -78,6 +78,8 @@ jobs:
         run: docker compose up --build -d --wait --wait-timeout 600
       - name: Smoke test through nginx (UI, login, seeded data, tenant isolation)
         run: node scripts/smoke.mjs http://localhost:3000
+      - name: Build the single-image Render Dockerfile (API + UI) so it cannot rot unnoticed
+        run: docker build -t flowmetrics-render .
       - name: Container logs (on failure)
         if: failure()
         run: docker compose logs --no-color

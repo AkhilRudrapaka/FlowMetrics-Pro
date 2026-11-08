@@ -16,6 +16,8 @@ With Docker Compose you only edit `.env` (copied from [.env.example](../.env.exa
 | `AUTH_RATE_LIMIT_PER_MIN` | no | `20` | Per-IP limit on login/register; `0` disables |
 | `CORS_ALLOWED_ORIGINS` | no | empty | Comma-separated origins. Only needed if the UI is served from a different origin than the API; the bundled nginx and Vite proxy make this unnecessary |
 | `TRUSTED_PROXIES` | no | empty | CIDRs allowed to set `X-Forwarded-For`. Compose sets the private Docker ranges so the rate limiter sees real client IPs |
+| `STATIC_DIR` | no | empty | When set, the API also serves the built web UI from this directory (SPA fallback, CSP, asset caching). Used by the single-image [Render deployment](deploy-render.md) (`/public`); Docker Compose leaves it unset and uses nginx instead |
+| `CLIENT_IP_HEADER` | no | empty | Header that carries the real visitor IP behind a CDN, e.g. `CF-Connecting-IP` on Render. Leave empty when nothing trustworthy sets it: a client-supplied header would otherwise let anyone dodge the login rate limiter |
 | `SEED_ON_START` | no | `false` | Insert demo data if the database has no users. **Never in production** |
 | `SEED_PASSWORD` | no | `Password123!` | Password for the seeded accounts |
 

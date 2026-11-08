@@ -23,7 +23,9 @@ type Config struct {
 	CookieSecure   bool
 	AllowedOrigins []string
 	TrustedProxies []string
-	AuthRatePerMin int // per-IP limit on login/register; 0 disables
+	ClientIPHeader string // header carrying the real client IP behind a CDN/proxy (e.g. CF-Connecting-IP); empty = ignore
+	StaticDir      string // when set, the API also serves the built web UI from this directory (single-origin deploys)
+	AuthRatePerMin int    // per-IP limit on login/register; 0 disables
 	SeedOnStart    bool
 }
 
@@ -40,6 +42,8 @@ func Load() (*Config, error) {
 		BcryptCost:     integer("BCRYPT_COST", 12, &errs),
 		AllowedOrigins: list(os.Getenv("CORS_ALLOWED_ORIGINS")),
 		TrustedProxies: list(os.Getenv("TRUSTED_PROXIES")),
+		ClientIPHeader: get("CLIENT_IP_HEADER", ""),
+		StaticDir:      get("STATIC_DIR", ""),
 		AuthRatePerMin: integer("AUTH_RATE_LIMIT_PER_MIN", 20, &errs),
 		SeedOnStart:    get("SEED_ON_START", "false") == "true",
 	}

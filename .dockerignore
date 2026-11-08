@@ -1,0 +1,19 @@
+# Build context for the root Dockerfile (the Render image). Keep it small and keep secrets out.
+.git
+.github
+.env
+.env.*
+**/.env
+**/.env.*
+**/node_modules
+frontend/dist
+docs
+scripts
+*.md
+docker-compose.yml
+render.yaml
+backend/Dockerfile
+backend/.dockerignore
+frontend/Dockerfile
+frontend/.dockerignore
+frontend/nginx.conf

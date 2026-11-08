@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -39,7 +40,10 @@ type res struct {
 	cookies []*http.Cookie
 }
 
-func newEnv(t *testing.T) *env {
+func newEnv(t *testing.T) *env { return newEnvWith(t, nil) }
+
+// newEnvWith lets a test adjust the config (e.g. enable the rate limiter) before the router is built.
+func newEnvWith(t *testing.T, tweak func(*config.Config)) *env {
 	t.Helper()
 	uri := os.Getenv("MONGO_TEST_URI")
 	if uri == "" {
@@ -56,6 +60,9 @@ func newEnv(t *testing.T) *env {
 		t.Fatal(err)
 	}
 	cfg := &config.Config{BcryptCost: 4, AccessTTL: time.Minute, RefreshTTL: time.Hour}
+	if tweak != nil {
+		tweak(cfg)
+	}
 	svc := service.New(repository.New(db), auth.NewTokenManager("test-secret-test-secret-test-secret-1234", time.Minute), 4, time.Hour)
 	return &env{t, handler.NewRouter(cfg, svc, func(ctx context.Context) error { return client.Ping(ctx, nil) }), db}
 }
@@ -539,6 +546,44 @@ func TestSearchFilterPagination(t *testing.T) {
 	if len(d["recent_activity"].([]any)) != 10 {
 		t.Errorf("recent_activity has %d entries, want 10", len(d["recent_activity"].([]any)))
 	}
+}
+
+// Behind a CDN (Render sits behind Cloudflare) every request arrives from the proxy's address, so the
+// login rate limiter must key on the real client IP header or one visitor would throttle everyone.
+func TestClientIPHeader(t *testing.T) {
+	failedLogin := func(e *env, clientIP string) int {
+		req := httptest.NewRequest("POST", "/api/v1/auth/login", strings.NewReader(`{"email":"x@y.dev","password":"wrong-password"}`))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("CF-Connecting-IP", clientIP)
+		w := httptest.NewRecorder()
+		e.r.ServeHTTP(w, req)
+		return w.Code
+	}
+
+	t.Run("configured: every visitor gets their own bucket", func(t *testing.T) {
+		e := newEnvWith(t, func(c *config.Config) { c.AuthRatePerMin = 2; c.ClientIPHeader = "CF-Connecting-IP" }) // burst = 5
+		for i := 0; i < 5; i++ {
+			if got := failedLogin(e, "203.0.113.1"); got != 401 {
+				t.Fatalf("attempt %d from visitor A = %d, want 401", i+1, got)
+			}
+		}
+		if got := failedLogin(e, "203.0.113.1"); got != 429 {
+			t.Errorf("visitor A's 6th attempt = %d, want 429", got)
+		}
+		if got := failedLogin(e, "203.0.113.2"); got != 401 {
+			t.Errorf("visitor B = %d, want 401: one visitor must not throttle another", got)
+		}
+	})
+
+	t.Run("not configured: the header is ignored, so it cannot be used to dodge the limiter", func(t *testing.T) {
+		e := newEnvWith(t, func(c *config.Config) { c.AuthRatePerMin = 2 })
+		for i := 0; i < 5; i++ {
+			failedLogin(e, fmt.Sprintf("198.51.100.%d", i)) // a different claimed IP each time
+		}
+		if got := failedLogin(e, "198.51.100.200"); got != 429 {
+			t.Errorf("spoofed header bypassed the limiter: got %d, want 429", got)
+		}
+	})
 }
 
 func TestHealthAndNotFound(t *testing.T) {

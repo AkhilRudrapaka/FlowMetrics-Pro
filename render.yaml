@@ -1,0 +1,43 @@
+# Render Blueprint: one free Docker web service that serves BOTH the API and the web UI.
+# Database: MongoDB Atlas (Render has no managed MongoDB).  Full guide: docs/deploy-render.md
+#
+# Why one service and not a static site + an API service? The login session is a SameSite=Strict
+# cookie, and onrender.com is a public suffix, so two *.onrender.com services count as different
+# sites: the browser would never send the cookie and every page reload would log you out.
+# Serving the UI from the API keeps everything on one origin, with no CORS at all.
+
+services:
+  - type: web
+    name: flowmetrics-pro
+    runtime: docker
+    plan: free
+    region: oregon            # pick the Atlas region next to it (Oregon <-> AWS us-west-2)
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /healthz # 200 only when MongoDB answers a ping
+    envVars:
+      # --- you provide this one (Render asks for it when you create the Blueprint) ---
+      - key: MONGO_URI
+        sync: false           # mongodb+srv://<user>:<password>@<cluster>.mongodb.net/?retryWrites=true&w=majority
+
+      # --- generated / fixed ---
+      - key: JWT_SECRET
+        generateValue: true   # Render creates a random 256-bit secret; never commit one
+      - key: APP_ENV
+        value: production     # JSON logs, rejects placeholder secrets
+      - key: COOKIE_SECURE
+        value: "true"         # Render serves HTTPS, so the refresh cookie must be Secure
+      - key: MONGO_DB
+        value: flowmetrics
+      - key: BCRYPT_COST
+        value: "10"           # the free instance has a fraction of a CPU; 10 keeps login fast (OWASP minimum)
+
+      # --- behind Render's proxy ---
+      - key: CLIENT_IP_HEADER
+        value: CF-Connecting-IP # real visitor IP (Render sits behind Cloudflare), for the login rate limiter
+      - key: TRUSTED_PROXIES
+        value: 10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
+
+      # --- demo data ---
+      - key: SEED_ON_START
+        value: "true"         # creates the demo accounts on first start only; set to "false" to start empty

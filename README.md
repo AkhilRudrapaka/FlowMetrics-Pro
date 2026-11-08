@@ -46,6 +46,12 @@ cd frontend && npm install && npm run dev
 PowerShell: `$env:MONGO_URI="mongodb://localhost:27017"; $env:JWT_SECRET=-join((1..32)|%{'{0:x2}' -f (Get-Random -Max 256)}); $env:SEED_ON_START="true"; go run ./cmd/server`
 </details>
 
+### Deploy it for free (Render + MongoDB Atlas)
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/AkhilRudrapaka/FlowMetrics-Pro)
+
+One free Render web service runs the API **and** serves the UI (a single origin keeps the strict session cookie working), backed by a free Atlas database. Step-by-step guide, environment variables and troubleshooting: **[docs/deploy-render.md](docs/deploy-render.md)**. Free instances sleep after 15 idle minutes, so the first load takes about a minute.
+
 ## Demo accounts
 
 Password for every account: **`Password123!`** (also shown on the login page in the Docker demo build)

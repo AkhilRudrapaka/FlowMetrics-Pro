@@ -35,6 +35,10 @@ func NewRouter(cfg *config.Config, svc *service.Services, ping func(context.Cont
 	h := &Handler{svc, cfg}
 	r := gin.New()
 	_ = r.SetTrustedProxies(cfg.TrustedProxies) // nil disables X-Forwarded-For trust
+	// Behind a CDN that sets one authoritative client-IP header (Render sits behind Cloudflare),
+	// read it so the rate limiter sees real visitors instead of one shared proxy address.
+	// Off by default: a client-supplied header must never be trusted when no CDN is in front.
+	r.TrustedPlatform = cfg.ClientIPHeader
 	r.Use(middleware.RequestLog(), middleware.Recover(), middleware.SecurityHeaders(), middleware.BodyLimit(1<<20))
 	if len(cfg.AllowedOrigins) > 0 {
 		r.Use(cors.New(cors.Config{

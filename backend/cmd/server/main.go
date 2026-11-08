@@ -69,9 +69,17 @@ func run() error {
 		}
 	}
 
+	router := handler.NewRouter(cfg, svc, func(ctx context.Context) error { return client.Ping(ctx, nil) })
+	if cfg.StaticDir != "" {
+		if err := handler.ServeStatic(router, cfg.StaticDir); err != nil {
+			return err
+		}
+		slog.Info("serving web UI", "dir", cfg.StaticDir)
+	}
+
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
-		Handler:           handler.NewRouter(cfg, svc, func(ctx context.Context) error { return client.Ping(ctx, nil) }),
+		Handler:           router,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      30 * time.Second,
