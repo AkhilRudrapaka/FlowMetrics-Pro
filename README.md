@@ -126,9 +126,10 @@ The requirement: *a user in one organization must never reach another organizati
 ```bash
 cd backend && MONGO_TEST_URI=mongodb://localhost:27017 go test ./...   # integration tests need a MongoDB
 cd frontend && npm test
+node scripts/smoke.mjs        # against a running `docker compose` stack: login, seeded data, tenant isolation
 ```
 
-GitHub Actions runs on every push: gofmt, vet and the full Go suite (race detector on) against a real MongoDB; frontend typecheck, tests and build; then it builds the Docker images, starts the whole stack, and smoke-tests login, seeded data and tenant isolation through nginx.
+GitHub Actions runs on every push: gofmt, vet and the full Go suite (race detector on) against a real MongoDB; frontend typecheck, tests and build; then it builds the Docker images, starts the whole stack, and runs the smoke test through nginx.
 
 ## Known limitations
 

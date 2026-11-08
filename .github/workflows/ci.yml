@@ -19,18 +19,24 @@ jobs:
     defaults:
       run:
         working-directory: backend
-    services:
-      # The integration tests (tenant isolation, RBAC, auth rotation...) run against a real MongoDB.
-      mongo:
-        image: mongo:8.0
-        ports: ["27017:27017"]
-        options: >-
-          --health-cmd "mongosh --quiet --eval 'db.adminCommand(\"ping\").ok'"
-          --health-interval 5s --health-timeout 5s --health-retries 12
     env:
       MONGO_TEST_URI: mongodb://localhost:27017
     steps:
       - uses: actions/checkout@v4
+      # The integration tests (tenant isolation, RBAC, auth rotation...) run against a real MongoDB.
+      # Started in a step rather than as a `services:` container so the readiness check is plain bash.
+      - name: Start MongoDB
+        run: |
+          docker run -d --name mongo -p 27017:27017 mongo:8.0
+          for i in $(seq 1 30); do
+            if docker exec mongo mongosh --quiet --eval 'db.adminCommand({ping:1}).ok' >/dev/null 2>&1; then
+              echo "MongoDB is ready"; exit 0
+            fi
+            sleep 2
+          done
+          docker logs mongo
+          echo "MongoDB did not become ready" >&2
+          exit 1
       - uses: actions/setup-go@v5
         with:
           go-version-file: backend/go.mod
@@ -71,21 +77,7 @@ jobs:
       - name: Build and start the full stack (waits until every service is healthy)
         run: docker compose up --build -d --wait --wait-timeout 600
       - name: Smoke test through nginx (UI, login, seeded data, tenant isolation)
-        run: |
-          set -euo pipefail
-          B=http://localhost:3000
-          curl -fsS "$B/" | grep -q 'id="root"'
-          login() { curl -fsS -X POST "$B/api/v1/auth/login" -H 'Content-Type: application/json' \
-            -d "{\"email\":\"$1\",\"password\":\"Password123!\"}" | jq -r .data.access_token; }
-          alice=$(login alice@acme.test); dave=$(login dave@globex.test)
-          test -n "$alice" && test "$alice" != null
-          orgs=$(curl -fsS "$B/api/v1/orgs" -H "Authorization: Bearer $alice")
-          echo "$orgs" | jq -e '.data | length == 2'
-          acme=$(echo "$orgs" | jq -r '.data[] | select(.name=="Acme Corp") | .id')
-          curl -fsS "$B/api/v1/orgs/$acme/dashboard" -H "Authorization: Bearer $alice" | jq -e '.data.total_projects == 3'
-          # a different tenant must get 404, never data
-          code=$(curl -s -o /dev/null -w '%{http_code}' "$B/api/v1/orgs/$acme/dashboard" -H "Authorization: Bearer $dave")
-          test "$code" = 404
+        run: node scripts/smoke.mjs http://localhost:3000
       - name: Container logs (on failure)
         if: failure()
         run: docker compose logs --no-color
