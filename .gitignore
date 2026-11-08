@@ -1,0 +1,26 @@
+# secrets / local config
+.env
+.env.local
+*.pem
+
+# dependencies & build output
+node_modules/
+frontend/dist/
+backend/bin/
+# the binary that `go build ./cmd/server` leaves in backend/
+/backend/server
+*.exe
+*.test
+*.out
+coverage/
+
+# local database files, if someone runs mongod from inside the repo
+mongo-data/
+data/db/
+
+# editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.log

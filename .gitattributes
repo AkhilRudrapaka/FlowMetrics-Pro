@@ -1,0 +1,7 @@
+# Keep LF line endings in every checkout, including on Windows. CRLF can corrupt values in
+# .env files and confuses some Docker tooling, regardless of the cloner's core.autocrlf setting.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.ico binary
